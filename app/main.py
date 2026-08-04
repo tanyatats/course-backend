@@ -260,6 +260,16 @@ import os as _os
 
 @app.post("/api/admin/fulfill")
 def admin_fulfill(payment_id: str, key: str, db: Session = Depends(get_db)):
+    return _do_fulfill(payment_id, key, db)
+
+
+# GET-версия того же — чтобы можно было просто открыть ссылку в браузере
+@app.get("/api/admin/fulfill")
+def admin_fulfill_get(payment_id: str, key: str, db: Session = Depends(get_db)):
+    return _do_fulfill(payment_id, key, db)
+
+
+def _do_fulfill(payment_id: str, key: str, db: Session):
     # проверка секрета
     admin_key = _os.getenv("ADMIN_KEY", "")
     if not admin_key or key != admin_key:
