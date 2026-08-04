@@ -119,7 +119,8 @@ def health():
         db_ok = True
     except Exception as e:
         log.error(f"DB health check failed: {e}")
-    return {"status": "ok", "yookassa": _YOOKASSA_READY, "db": db_ok}
+    return {"status": "ok", "yookassa": _YOOKASSA_READY, "db": db_ok,
+            "mail": bool(config.SMTP_HOST and config.SMTP_USER and config.SMTP_PASSWORD)}
 
 
 # ---------- создание платежа ----------

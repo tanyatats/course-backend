@@ -28,10 +28,14 @@ SMTP_HOST = os.getenv("SMTP_HOST", "")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-# От кого письмо (обычно совпадает с SMTP_USER)
 SMTP_FROM = os.getenv("SMTP_FROM", "") or SMTP_USER
-# Имя отправителя, которое увидит ученик
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "tanya.tats")
+
+# --- Unisender Go (отправка писем по HTTPS API, обход блокировки SMTP) ---
+UNISENDER_API_KEY = os.getenv("UNISENDER_API_KEY", "")
+# Адрес отправителя (должен быть на подтверждённом в Unisender домене)
+MAIL_FROM_EMAIL = os.getenv("MAIL_FROM_EMAIL", "info@tanyatats.ru")
+MAIL_FROM_NAME = os.getenv("MAIL_FROM_NAME", "tanya.tats")
 
 # --- Прочее ---
 # Разрешённые источники (CORS) — твой сайт
