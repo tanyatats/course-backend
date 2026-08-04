@@ -35,13 +35,33 @@ except Exception:
     _YOOKASSA_READY = False
 
 # --- БД ---
+import logging
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("course")
+
 connect_args = {"check_same_thread": False} if config.DATABASE_URL.startswith("sqlite") else {}
 engine = create_engine(config.DATABASE_URL, connect_args=connect_args, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-Base.metadata.create_all(bind=engine)
+
+# Создание таблиц НЕ должно ронять старт приложения:
+# если БД на миг недоступна, приложение всё равно поднимется,
+# а таблицы создадутся при первом успешном обращении.
+_DB_READY = False
+def init_db():
+    global _DB_READY
+    try:
+        Base.metadata.create_all(bind=engine)
+        _DB_READY = True
+        log.info("DB tables ready")
+    except Exception as e:
+        log.error(f"DB init failed (will retry on first request): {e}")
+
+init_db()
 
 
 def get_db():
+    if not _DB_READY:
+        init_db()
     db = SessionLocal()
     try:
         yield db
@@ -90,7 +110,16 @@ class PayRequest(BaseModel):
 # ---------- служебные ----------
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "yookassa": _YOOKASSA_READY}
+    # проверяем живость БД прямо сейчас
+    db_ok = False
+    try:
+        from sqlalchemy import text
+        with engine.connect() as c:
+            c.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception as e:
+        log.error(f"DB health check failed: {e}")
+    return {"status": "ok", "yookassa": _YOOKASSA_READY, "db": db_ok}
 
 
 # ---------- создание платежа ----------

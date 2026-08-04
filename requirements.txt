@@ -1,6 +1,6 @@
-fastapi
-uvicorn[standard]
-sqlalchemy
-pydantic[email]
-psycopg2-binary
-yookassa
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+sqlalchemy==2.0.36
+pydantic[email]==2.10.4
+psycopg2-binary==2.9.10
+yookassa==3.5.0
