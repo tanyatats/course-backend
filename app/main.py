@@ -251,3 +251,59 @@ def check_access(token: str, db: Session = Depends(get_db)):
     if rec is None or rec.status != "paid":
         raise HTTPException(404, "no access")
     return {"access": True, "product": rec.product}
+
+
+# ---------- СЛУЖЕБНЫЙ: вручную обработать уже прошедший платёж ----------
+# Нужен, если оплата прошла, а webhook в тот момент не был настроен.
+# Защищён секретным словом ADMIN_KEY (переменная окружения).
+import os as _os
+
+@app.post("/api/admin/fulfill")
+def admin_fulfill(payment_id: str, key: str, db: Session = Depends(get_db)):
+    # проверка секрета
+    admin_key = _os.getenv("ADMIN_KEY", "")
+    if not admin_key or key != admin_key:
+        raise HTTPException(403, "forbidden")
+    if not _YOOKASSA_READY:
+        raise HTTPException(503, "yookassa not configured")
+
+    # находим платёж в ЮKassa и убеждаемся, что он оплачен
+    try:
+        verified = Payment.find_one(payment_id)
+    except Exception as e:
+        raise HTTPException(502, f"cannot find payment: {e}")
+    if verified.status != "succeeded":
+        raise HTTPException(400, f"payment status is {verified.status}, not succeeded")
+
+    meta = verified.metadata or {}
+    email = meta.get("email", "")
+    product = meta.get("product", "mini")
+    if not email:
+        raise HTTPException(400, "no email in payment metadata")
+
+    # находим или создаём запись
+    rec = db.query(Purchase).filter(Purchase.payment_id == payment_id).first()
+    if rec is None:
+        rec = Purchase(
+            payment_id=payment_id,
+            product=product,
+            email=email,
+            amount=config.PRICE_MINI if product == "mini" else config.PRICE_EXTENDED,
+            access_token=meta.get("access_token") or secrets.token_urlsafe(24),
+            status="pending",
+        )
+        db.add(rec)
+    rec.status = "paid"
+    rec.paid_at = datetime.utcnow()
+    db.commit()
+
+    # отправляем письмо с курсом
+    from .mailer import send_course_email
+    try:
+        send_course_email(rec.email, rec.product, rec.access_token)
+        rec.email_sent = True
+        db.commit()
+        return {"ok": True, "sent_to": rec.email, "product": rec.product,
+                "course_link": f"{config.BACKEND_BASE_URL}/course.html?t={rec.access_token}"}
+    except Exception as e:
+        raise HTTPException(500, f"mail send failed: {e}")
