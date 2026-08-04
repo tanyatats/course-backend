@@ -69,21 +69,49 @@ def build_email(to_email: str, product: str, access_token: str) -> EmailMessage:
 def send_course_email(to_email: str, product: str, access_token: str) -> None:
     """
     Отправляет письмо через SMTP.
-    Бросает исключение при ошибке — вызывающий код решает, что делать.
+    Пробует несколько портов (сначала заданный, потом запасные),
+    т.к. на некоторых платформах часть SMTP-портов заблокирована.
+    Бросает исключение, если ни один способ не сработал.
     """
     if not (config.SMTP_HOST and config.SMTP_USER and config.SMTP_PASSWORD):
         raise RuntimeError("SMTP не настроен: заполни SMTP_* переменные окружения")
 
     msg = build_email(to_email, product, access_token)
-
     context = ssl.create_default_context()
-    # Порт 465 -> SSL, порт 587 -> STARTTLS
-    if config.SMTP_PORT == 465:
-        with smtplib.SMTP_SSL(config.SMTP_HOST, config.SMTP_PORT, context=context) as s:
+    TIMEOUT = 15
+
+    def _via_ssl(port):
+        with smtplib.SMTP_SSL(config.SMTP_HOST, port, context=context, timeout=TIMEOUT) as s:
             s.login(config.SMTP_USER, config.SMTP_PASSWORD)
             s.send_message(msg)
-    else:
-        with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT) as s:
+
+    def _via_starttls(port):
+        with smtplib.SMTP(config.SMTP_HOST, port, timeout=TIMEOUT) as s:
+            s.ehlo()
             s.starttls(context=context)
             s.login(config.SMTP_USER, config.SMTP_PASSWORD)
             s.send_message(msg)
+
+    # порядок попыток: сначала то, что указано в SMTP_PORT, затем запасные
+    attempts = []
+    if config.SMTP_PORT == 465:
+        attempts = [("ssl", 465), ("starttls", 587), ("starttls", 2525), ("starttls", 25)]
+    elif config.SMTP_PORT == 587:
+        attempts = [("starttls", 587), ("ssl", 465), ("starttls", 2525), ("starttls", 25)]
+    else:
+        attempts = [("starttls", config.SMTP_PORT), ("ssl", 465), ("starttls", 587), ("starttls", 2525)]
+
+    errors = []
+    for mode, port in attempts:
+        try:
+            if mode == "ssl":
+                _via_ssl(port)
+            else:
+                _via_starttls(port)
+            return  # успех
+        except Exception as e:
+            errors.append(f"{mode}:{port} -> {type(e).__name__}: {e}")
+            continue
+
+    # ни один способ не сработал — бросаем сводную ошибку
+    raise RuntimeError("SMTP failed on all ports. " + " | ".join(errors))
