@@ -1,1 +1,1 @@
-allow_origins=config.CORS_ORIGINS,
+from app.main import app
