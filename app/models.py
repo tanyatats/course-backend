@@ -36,3 +36,17 @@ class Purchase(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     paid_at = Column(DateTime, nullable=True)
+    class PromoCode(Base):
+    """Промокод со скидкой в процентах."""
+    __tablename__ = "promo_codes"
+    # сам код в верхнем регистре — первичный ключ
+    code = Column(String, primary_key=True)
+    # скидка в процентах: 20 = -20%
+    discount_percent = Column(Integer, default=0, nullable=False)
+    # сколько раз можно применить (0 = без лимита)
+    limit = Column(Integer, default=0, nullable=False)
+    # сколько уже применили
+    used = Column(Integer, default=0, nullable=False)
+    # можно быстро выключить, не удаляя
+    active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
